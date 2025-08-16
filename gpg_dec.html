@@ -1,1 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPG Encryptor & Decryptor</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- OpenPGP.js for encryption/decryption -->
+    <script src="https://cdn.jsdelivr.net/npm/openpgp@5/dist/openpgp.min.js"></script>
+    <style>
+        /* Custom styles for a clean look */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .container {
+            max-width: 700px;
+        }
+        #outputContent {
+            min-height: 200px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-900 text-gray-200 flex items-center justify-center min-h-screen p-4">
+
+<div class="container w-full bg-gray-800 p-6 sm:p-8 rounded-2xl shadow-2xl border border-gray-700">
+    <header class="text-center mb-6">
+        <h1 class="text-3xl font-bold text-white">GPG Encrypt & Decrypt</h1>
+        <p class="text-gray-400 mt-2">Encrypt or decrypt files with a passphrase right in your browser.</p>
+    </header>
+
+    <!-- TABS -->
+    <div class="flex justify-center space-x-4 mb-6">
+        <button id="decryptTab" class="py-2 px-5 font-semibold rounded-lg transition-all duration-300 bg-blue-600 text-white ring-4 ring-blue-500/75">Decrypt</button>
+        <button id="encryptTab" class="py-2 px-5 font-semibold rounded-lg transition-all duration-300 bg-gray-700 text-gray-300 hover:bg-gray-600">Encrypt</button>
+    </div>
+
+    <!-- DECRYPT PANEL -->
+    <div id="decryptPanel">
+        <div class="mb-5">
+            <label for="gpgFileDecrypt" class="block mb-2 text-sm font-medium text-gray-300">1. Select your encrypted `.asc` or `.gpg` file</label>
+            <input type="file" id="gpgFileDecrypt" accept=".asc,.gpg" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"/>
+        </div>
+        <div class="mb-6">
+            <label for="passwordDecrypt" class="block mb-2 text-sm font-medium text-gray-300">2. Enter the passphrase</label>
+            <input type="password" id="passwordDecrypt" placeholder="••••••••••••" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3 transition duration-300">
+        </div>
+        <button id="decryptBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 shadow-lg">
+            Decrypt File
+        </button>
+    </div>
+
+    <!-- ENCRYPT PANEL -->
+    <div id="encryptPanel" class="hidden">
+        <div class="mb-5">
+            <label for="textEncrypt" class="block mb-2 text-sm font-medium text-gray-300">1. Enter text to encrypt (or load a file)</label>
+            <textarea id="textEncrypt" rows="5" placeholder="Type your secret message here..." class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3 transition duration-300"></textarea>
+            <label for="fileEncrypt" class="block mt-3 text-sm font-medium text-blue-400 hover:text-blue-300 cursor-pointer text-center">
+                ... or click here to load content from a file.
+                <input type="file" id="fileEncrypt" class="hidden"/>
+            </label>
+        </div>
+        <div class="mb-6">
+            <label for="passwordEncrypt" class="block mb-2 text-sm font-medium text-gray-300">2. Set a passphrase</label>
+            <input type="password" id="passwordEncrypt" placeholder="Choose a strong passphrase" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3 transition duration-300">
+        </div>
+        <button id="encryptBtn" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 shadow-lg">
+            Encrypt Text / File
+        </button>
+    </div>
+
+    <!-- Status/Error Messages -->
+    <div id="status" class="text-center mt-4 text-sm text-yellow-400 h-5"></div>
+
+    <!-- Decrypted Output Section -->
+    <div id="outputSection" class="mt-6 hidden">
+        <h2 id="outputTitle" class="text-xl font-semibold mb-3 text-white"></h2>
+        <textarea id="outputContent" readonly class="w-full bg-gray-900 border border-gray-600 rounded-lg p-4 text-gray-300 font-mono text-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+        <div class="mt-4 flex flex-wrap gap-2">
+            <button id="downloadBtn" class="flex-grow sm:flex-grow-0 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded-lg transition duration-300">
+                Download File
+            </button>
+            <button id="copyBtn" class="flex-grow sm:flex-grow-0 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-5 rounded-lg transition duration-300">
+                Copy to Clipboard
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Global elements
+    const status = document.getElementById('status');
+    const outputSection = document.getElementById('outputSection');
+    const outputTitle = document.getElementById('outputTitle');
+    const outputContent = document.getElementById('outputContent');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const copyBtn = document.getElementById('copyBtn');
+
+    // Tabs
+    const decryptTab = document.getElementById('decryptTab');
+    const encryptTab = document.getElementById('encryptTab');
+    const decryptPanel = document.getElementById('decryptPanel');
+    const encryptPanel = document.getElementById('encryptPanel');
+
+    // Decryption elements
+    const fileInputDecrypt = document.getElementById('gpgFileDecrypt');
+    const passwordInputDecrypt = document.getElementById('passwordDecrypt');
+    const decryptButton = document.getElementById('decryptBtn');
+
+    // Encryption elements
+    const textInputEncrypt = document.getElementById('textEncrypt');
+    const fileInputEncrypt = document.getElementById('fileEncrypt');
+    const passwordInputEncrypt = document.getElementById('passwordEncrypt');
+    const encryptButton = document.getElementById('encryptBtn');
+
+    let fileContentToProcess = null; // Can be string (encrypt) or Uint8Array (decrypt)
+    let decryptedData = null; // Will hold Uint8Array of decrypted binary data
+    let outputFileName = 'file.txt';
+
+    // --- Tab Switching Logic ---
+    decryptTab.addEventListener('click', () => switchTab('decrypt'));
+    encryptTab.addEventListener('click', () => switchTab('encrypt'));
+
+    function switchTab(mode) {
+        outputSection.classList.add('hidden');
+        status.textContent = '';
+        fileContentToProcess = null;
+        decryptedData = null;
+
+        const activeClasses = ['bg-blue-600', 'text-white', 'ring-4', 'ring-blue-500/75'];
+        const inactiveClasses = ['bg-gray-700', 'text-gray-300', 'hover:bg-gray-600'];
+
+        if (mode === 'decrypt') {
+            decryptPanel.classList.remove('hidden');
+            encryptPanel.classList.add('hidden');
+            decryptTab.classList.add(...activeClasses);
+            decryptTab.classList.remove(...inactiveClasses);
+            encryptTab.classList.add(...inactiveClasses);
+            encryptTab.classList.remove(...activeClasses);
+        } else {
+            decryptPanel.classList.add('hidden');
+            encryptPanel.classList.remove('hidden');
+            encryptTab.classList.add(...activeClasses);
+            encryptTab.classList.remove(...inactiveClasses);
+            decryptTab.classList.add(...inactiveClasses);
+            decryptTab.classList.remove(...activeClasses);
+        }
+    }
+
+    // --- File Readers ---
+    fileInputDecrypt.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        // **FIX**: Read as ArrayBuffer to support binary files
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            fileContentToProcess = new Uint8Array(e.target.result);
+            status.textContent = `File "${file.name}" loaded for decryption.`;
+            if (file.name.toLowerCase().endsWith('.asc') || file.name.toLowerCase().endsWith('.gpg')) {
+                outputFileName = file.name.substring(0, file.name.lastIndexOf('.'));
+            } else {
+                outputFileName = 'decrypted.dat';
+            }
+        };
+        reader.onerror = () => status.textContent = 'Error reading file.';
+        reader.readAsArrayBuffer(file);
+    });
+
+    fileInputEncrypt.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            textInputEncrypt.value = e.target.result;
+            status.textContent = `File "${file.name}" loaded for encryption.`;
+            outputFileName = `${file.name}.asc`;
+        };
+        reader.onerror = () => status.textContent = 'Error reading file.';
+        reader.readAsText(file);
+    });
+
+    // --- Core Logic ---
+    decryptButton.addEventListener('click', async () => {
+        const password = passwordInputDecrypt.value;
+        if (!fileContentToProcess) { status.textContent = 'Please select a file first.'; return; }
+        if (!password) { status.textContent = 'Please enter the passphrase.'; return; }
+
+        decryptButton.disabled = true;
+        status.textContent = 'Decrypting... please wait.';
+
+        try {
+            // **FIX**: Intelligent message reading for both armored and binary formats
+            let message;
+            const armoredText = new TextDecoder().decode(fileContentToProcess).trim();
+            if (armoredText.startsWith('-----BEGIN PGP MESSAGE-----')) {
+                message = await openpgp.readMessage({ armoredMessage: armoredText });
+            } else {
+                message = await openpgp.readMessage({ binaryMessage: fileContentToProcess });
+            }
+
+            const { data } = await openpgp.decrypt({
+                message,
+                passwords: [password],
+                format: 'binary' // **FIX**: Always decrypt to binary for consistency
+            });
+
+            decryptedData = data; // Store binary data
+            status.textContent = '✅ Decryption successful!';
+            outputTitle.textContent = 'Decrypted Content';
+            outputSection.classList.remove('hidden');
+
+            // Try to display as text, fallback for binary
+            try {
+                outputContent.value = new TextDecoder("utf-8", { fatal: true }).decode(data);
+                copyBtn.style.display = 'inline-flex';
+            } catch (e) {
+                outputContent.value = `[Binary file: ${data.length} bytes]\n\nThis content cannot be displayed as text. Please use the "Download File" button.`;
+                copyBtn.style.display = 'none';
+            }
+
+        } catch (error) {
+            status.textContent = '❌ Decryption failed. Check passphrase or file.';
+            outputContent.value = `Error: ${error.message}`;
+            outputTitle.textContent = 'Error';
+            outputSection.classList.remove('hidden');
+            copyBtn.style.display = 'inline-flex';
+        } finally {
+            decryptButton.disabled = false;
+        }
+    });
+
+    encryptButton.addEventListener('click', async () => {
+        const textToEncrypt = textInputEncrypt.value;
+        const password = passwordInputEncrypt.value;
+        if (!textToEncrypt) { status.textContent = 'Please enter text or load a file.'; return; }
+        if (!password) { status.textContent = 'Please set a passphrase.'; return; }
+
+        // Set default filename if not loaded from file
+        if (outputFileName === 'file.txt' || !outputFileName.endsWith('.asc')) {
+            outputFileName = 'encrypted.asc';
+        }
+
+        encryptButton.disabled = true;
+        status.textContent = 'Encrypting... please wait.';
+
+        try {
+            const encrypted = await openpgp.encrypt({
+                message: await openpgp.createMessage({ text: textToEncrypt }),
+                passwords: [password],
+                format: 'armored'
+            });
+            outputContent.value = encrypted;
+            decryptedData = new TextEncoder().encode(encrypted); // Store for download
+            outputTitle.textContent = 'Encrypted Content (PGP Block)';
+            outputSection.classList.remove('hidden');
+            status.textContent = '✅ Encryption successful!';
+            copyBtn.style.display = 'inline-flex';
+        } catch (error) {
+            status.textContent = '❌ Encryption failed.';
+            outputContent.value = `Error: ${error.message}`;
+            outputTitle.textContent = 'Error';
+            outputSection.classList.remove('hidden');
+            copyBtn.style.display = 'inline-flex';
+        } finally {
+            encryptButton.disabled = false;
+        }
+    });
+
+    // --- Output Buttons ---
+    downloadBtn.addEventListener('click', () => {
+        let dataToDownload = decryptedData;
+        // For encryption tab, the data is in the text area
+        if (encryptPanel.classList.contains('hidden') === false) {
+             dataToDownload = new TextEncoder().encode(outputContent.value);
+        }
+
+        if (!dataToDownload) {
+            status.textContent = "No data to download.";
+            return;
+        }
+        const blob = new Blob([dataToDownload], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = outputFileName || 'file.dat';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+
+    copyBtn.addEventListener('click', () => {
+        outputContent.select();
+        try {
+            document.execCommand('copy');
+            status.textContent = 'Copied to clipboard!';
+        } catch (err) {
+            status.textContent = 'Failed to copy.';
+        }
+        window.getSelection().removeAllRanges();
+    });
+
+    // Initialize view
+    switchTab('decrypt');
+</script>
+</body>
+</html>
 
